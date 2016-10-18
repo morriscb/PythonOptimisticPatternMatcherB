@@ -6,6 +6,7 @@ from scipy.spatial import cKDTree
 
 __deg_to_rad__ = np.pi/180.0
 
+
 class OptimisticPatternMatcherB(object):
     """Class implimenting Optimistic Pattern Matcher B from Tubak 2007. The
     class loads and stores the reference object in a convienent data structure
@@ -23,7 +24,7 @@ class OptimisticPatternMatcherB(object):
         self._reference_catalog = reference_catalog
         self._n_reference = len(self._reference_catalog)
         self._dist_tol = dist_tol
-        self._max_cos2theta = 2*__deg_to_rad__*max_angle
+        self._max_angle = max_angle
         self._max_shift = max_shift
 
         self._build_distances_and_angles()
@@ -36,7 +37,7 @@ class OptimisticPatternMatcherB(object):
             (self._n_reference*(self._n_reference - 1)/2, 2), dtype=np.int_)
         self._dist_array = np.empty(
             self._n_reference*(self._n_reference - 1)/2, dtype=np.float_)
-        self._cos2theta_array = np.empty(
+        self._theta_array = np.empty(
             self._n_reference*(self._n_reference - 1)/2, dtype=np.float_)
         self._quadrant_array = np.empty(
             (self._n_reference*(self._n_reference - 1)/2, 2), dtype=np.bool_)
@@ -51,8 +52,8 @@ class OptimisticPatternMatcherB(object):
             tmp_dy = self._reference_catalog[ref_idx + 1:, 1] - ref_obj[1]
             dist_sq = (tmp_dx*tmp_dx + tmp_dy*tmp_dy)
             self._dist_array[start_idx: start_idx + end_idx] = dist_sq
-            self._cos2theta_array[start_idx: start_idx + end_idx] = (
-                2*tmp_dy*tmp_dy/dist_sq - 1)
+            self._theta_array[start_idx: start_idx + end_idx] = np.arccos(
+                2*tmp_dy*tmp_dy/dist_sq - 1)/2
             self._quadrant_array[start_idx: start_idx + end_idx, 0] = (
                 tmp_dx <= 0)
             self._quadrant_array[start_idx: start_idx + end_idx, 1] = (
@@ -62,7 +63,7 @@ class OptimisticPatternMatcherB(object):
         self._sorted_args = self._dist_array.argsort()
         self._id_array = self._id_array[self._sorted_args]
         self._dist_array = self._dist_array[self._sorted_args]
-        self._cos2theta_array = self._cos2theta_array[self._sorted_args]
+        self._theta_array = self._cos2theta_array[self._sorted_args]
         self._quadrant_array = self._quadrant_array[self._sorted_args]
 
         return None
@@ -85,9 +86,12 @@ class OptimisticPatternMatcherB(object):
         max_idx = np.searchsorted(self._dist_array, dist_sq[0] + self._dist_tol,
                                   side='right')
         
-        for 
+        if min_idx == max_idx:
+            return pattern_found, None
         
-        
+        for dist_idx in xrange(min_idx, max_idx):
+            self._quadrant_array
+            
         return pattern_found, matched_references
         
     def _compute_shift(self):
