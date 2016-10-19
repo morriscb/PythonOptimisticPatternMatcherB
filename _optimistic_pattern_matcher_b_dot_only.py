@@ -24,7 +24,7 @@ class OptimisticPatternMatcherB(object):
                  dist_tol, ang_tol):
         self._reference_catalog = reference_catalog
         self._n_reference = len(self._reference_catalog)
-        self._max_cos = np.cos(max_rotation*__deg_to_rad__)
+        self._max_cos_sq = np.cos(max_rotation*__deg_to_rad__)
         self._max_shift = max_shift
         self._dist_tol = dist_tol
         self._ang_tol = ang_tol
@@ -91,43 +91,41 @@ class OptimisticPatternMatcherB(object):
             matched_references = []
             dot = (tmp_dx[0]*self._dx_array[dist_idx] +
                    tmp_dy[0]*self._dy_array[dist_idx])
-            cos_theta_scr = dot/dist_sq
-            cos_theta_ref = dot/self._dist_array[dist_idx]
-            if (np.fabs(cos_theta_scr) < self._max_cos or
-                np.fabs(cos_theta_ref) < self._max_cos):
+            cos_theta_sq = dot*dot/(dist_sq*self._dist_array[dist_idx])
+            if np.fabs(cos_theta_sq) < self._max_cos_sq:
                 continue
-            
-            # Posible check for max distance in these two.
+        
+            dot_sign = 1
             if dot > 0:
                 matched_references.append(self._id_array[dist_idx, 0])
-                delta_dx = tmp_dx[0] - self._dx_array[dist_idx]
-                delta_dy = tmp_dy[0] - self._dy_array[dist_idx]
             else:
+                dot_sign = -1
                 matched_references.append(self._id_array[dist_idx, 1])
-                delta_dx = tmp_dx[0] + self._dx_array[dist_idx]
-                delta_dy = tmp_dy[0] + self._dy_array[dist_idx]
 
             x,y = self._reference_catalog[matched_references[0],:2]
             if (np.fabs(dist_candidates[0, 0] - x) >= self._max_shift or
                 np.fabs(dist_candidates[0, 1] - y) >= self._max_shift):
                 continue
+            
+            cross = dot_sign*(tmp_dx[0]*self._dy_array[dist_idx] -
+                              tmp_dy[0]*self._dx_array[dist_idx])
+            sin_theta_sq = cross*cross/(dist_sq*self._dist_array[dist_idx])
+            
+            delta_dx = tmp_dx[0] - dot_sign*self._dx_array[dist_idx]
+            delta_dy = tmp_dy[0] - dot_sign*self._dy_array[dist_idx]
     
             id_mask = np.logical_or(
                 self._id_array[:, 0] == matched_references[0],
                 self._id_array[:, 1] == matched_references[0])
-            
             tmp_ref_dist_arary = self._dist_array[id_mask]
             tmp_ref_dx_array = self._dx_array[id_mask]
             tmp_ref_dy_array = self._dy_array[id_mask]
             tmp_ref_id_array = self.__id_array[id_mask]
             
-            delta_dx = tmp_dx[0] - self._dx_array[dist_idx]
-            delta_dy = tmp_dy[0] - self._dy_array[dist_idx]
-            
             for cand_idx in xrange(1, len(dist_sq)):
                 match = self._pattern_spoke_test(
                     dist_sq[cand_idx], tmp_dx[cand_idx], tmp_dy[cand_idx],
-                    matched_references[0], cos_theta_ref, delta_dx, delta_dy,
+                    matched_references[0], cos_theta_sq, delta_dx, delta_dy,
                     tmp_ref_dist_arary, tmp_ref_dx_array, tmp_ref_dy_array,
                     tmp_ref_id_array)
                 if match is None:
