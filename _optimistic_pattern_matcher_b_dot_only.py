@@ -26,8 +26,8 @@ class OptimisticPatternMatcherB(object):
         self._n_reference = len(self._reference_catalog)
         self._max_cos_sq = np.cos(max_rotation*__deg_to_rad__)
         self._max_shift = max_shift
-        self._dist_tol = dist_tol
-        self._ang_tol = ang_tol
+        self._dist_tol = dist_tol*dist_tol
+        self._ang_tol = ang_tol*__deg_to_rad__
         self._max_match_dist = max_match_dist
         
         self._ref_kdtree = cKDTree(self._reference_catalog[:,:2])
@@ -39,18 +39,17 @@ class OptimisticPatternMatcherB(object):
         angles between pairs of objects in the reference catalog. 
         """
         self._id_array = np.empty(
-            (self._n_reference*(self._n_reference - 1)/2, 2), dtype=np.int_)
+            (int(self._n_reference*(self._n_reference - 1)/2), 2), dtype=np.int_)
         self._dist_array = np.empty(
-            self._n_reference*(self._n_reference - 1)/2, dtype=np.float_)
+            int(self._n_reference*(self._n_reference - 1)/2), dtype=np.float_)
         self._dx_array = np.empty(
-            self._n_reference*(self._n_reference - 1)/2, dtype=np.float_)
+            int(self._n_reference*(self._n_reference - 1)/2), dtype=np.float_)
         self._dy_array = np.empty(
-            self._n_reference*(self._n_reference - 1)/2, dtype=np.float_)
+            int(self._n_reference*(self._n_reference - 1)/2), dtype=np.float_)
 
         start_idx = 0
         for ref_idx, ref_obj in enumerate(self._reference_catalog):
-            
-            end_idx =  self._n_reference - ref_idx
+            end_idx =  self._n_reference - 1 - ref_idx
             self._id_array[start_idx: start_idx + end_idx, 0] = ref_idx
             self._id_array[start_idx: start_idx + end_idx, 1] = np.arange(
                 ref_idx + 1, self._n_reference, dtype=np.int_)
@@ -66,7 +65,7 @@ class OptimisticPatternMatcherB(object):
         self._sorted_args = self._dist_array.argsort()
         self._id_array = self._id_array[self._sorted_args]
         self._dx_array = self._dx_array[self._sorted_args]
-        self._dy_array = self._dy_arra[self._sorted_args]
+        self._dy_array = self._dy_array[self._sorted_args]
 
         return None
     
