@@ -242,8 +242,8 @@ class OptimisticPatternMatcherB(object):
             # This limit relies on the small angle approximation
             # sin(theta)=theta and the fact that the difference between
             # theta_ref and theta_src should be at most +- theta_tolerance.
-            ang_lim = (-self._ang_tol*(2*sin_theta_ref - self._ang_tol),
-                       self._ang_tol*(2*sin_theta_ref + self._ang_tol))
+            ang_lim = (-self._ang_tol*(2*sin_theta_ref + self._ang_tol),
+                       self._ang_tol*(2*sin_theta_ref - self._ang_tol))
             if (np.min(ang_lim) < sin_theta_ref*sin_theta_ref - sin_theta_sq <
                 np.max(ang_lim)):
                 # We found a match, store the correct id and then exit the loop.
