@@ -1,2 +1,2 @@
 # PythonOptimisticPatternMatcherB
-Python implementation of Optimistic Pattern Matcher B from Tubar 2007.
+Python implementation of Optimistic Pattern Matcher B from Tabur 2007.
