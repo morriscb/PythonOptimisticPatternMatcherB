@@ -312,7 +312,8 @@ class OptimisticPatternMatcherB(object):
         # of n_match each time.
         matches = None
         distances = None
-        for pattern_idx in xrange(self._max_n_patterns):
+        for pattern_idx in xrange(np.min((self._max_n_patterns,
+                                          len(source_catalog) - n_match))):
             # Grab the sources
             pattern = sorted_catalog[pattern_idx: pattern_idx + n_match]
             ref_candidates, cos_theta, sin_theta = (
@@ -326,6 +327,8 @@ class OptimisticPatternMatcherB(object):
                 matches, distances = self._compute_matches(shifted_sources)
                 print('Matches:', len(matches))
                 if len(matches) > self._min_matches:
-                    print("Succeeded after %i patterns..." % pattern_idx)
+                    print("Succeeded after %i patterns." % pattern_idx)
                     break
+        if matches is None:
+            print("Failed after %i patterns." % pattern_idx)
         return matches, distances
