@@ -1,9 +1,10 @@
 
 from __future__ import division, print_function, absolute_import
 
+from copy import copy
+
 import numpy as np
 from scipy.spatial import cKDTree
-from numpy.distutils.fcompiler import none
 
 __deg_to_rad__ = np.pi/180.0
 
@@ -20,15 +21,18 @@ class OptimisticPatternMatcherB(object):
         max_shift: float max distance to shift the image for a match
     """
     
-    def __init__(self, reference_catalog, max_rotation, max_shift,
-                 dist_tol, ang_tol, max_match_dist):
-        self._reference_catalog = reference_catalog
+    def __init__(self, reference_catalog, max_shift, max_rotation,
+                 dist_tol, ang_tol, max_match_dist, min_matches,
+                 max_n_patterns):
+        self._reference_catalog = copy(reference_catalog)
         self._n_reference = len(self._reference_catalog)
         self._max_cos_sq = np.cos(max_rotation*__deg_to_rad__)
         self._max_shift = max_shift
         self._dist_tol = dist_tol*dist_tol
         self._ang_tol = ang_tol*__deg_to_rad__
         self._max_match_dist = max_match_dist
+        self._min_matches = min_matches
+        self._max_n_patterns = max_n_patterns
         
         self._ref_kdtree = cKDTree(self._reference_catalog[:,:2])
 
@@ -63,6 +67,7 @@ class OptimisticPatternMatcherB(object):
             start_idx += end_idx
 
         self._sorted_args = self._dist_array.argsort()
+        self._dist_array = self._dist_array[self._sorted_args]
         self._id_array = self._id_array[self._sorted_args]
         self._dx_array = self._dx_array[self._sorted_args]
         self._dy_array = self._dy_array[self._sorted_args]
@@ -82,6 +87,7 @@ class OptimisticPatternMatcherB(object):
         #     of the pinwheel until they are absolutely needed.
         tmp_dx = source_candidates[1:, 0] - source_candidates[0, 0]
         tmp_dy = source_candidates[1:, 1] - source_candidates[0, 1]
+        
         dist_sq = (tmp_dx*tmp_dx + tmp_dy*tmp_dy)
         # We first test if the distance of the first (AB) spoke of our source
         # pinwheel can be found in the array of reference catalog pairs.
@@ -93,7 +99,7 @@ class OptimisticPatternMatcherB(object):
         # also test if the edges to make sure we are not running over the array
         # size.
         if start_idx == end_idx:
-            return matched_references
+            return ([], None, None)
         if start_idx < 0:
             start_idx = 0
         if end_idx > self._dist_array.shape[0]:
@@ -111,7 +117,7 @@ class OptimisticPatternMatcherB(object):
             # reference vector. 
             dot = (tmp_dx[0]*self._dx_array[dist_idx] +
                    tmp_dy[0]*self._dy_array[dist_idx])
-            cos_theta_sq = dot*dot/(dist_sq*self._dist_array[dist_idx])
+            cos_theta_sq = dot*dot/(dist_sq[0]*self._dist_array[dist_idx])
             # Test if the angle between the two vectors are co-aligned within
             # the user specified max rotation. This is the major rejection point
             # for candidates.
@@ -146,7 +152,7 @@ class OptimisticPatternMatcherB(object):
             # we're at least protected by several exit clauses above. We will
             # only need this once per pinwheel candidate.
             sin_theta = np.sign(cross)*np.sqrt(
-                cross*cross/(dist_sq*self._dist_array[dist_idx]))
+                cross*cross/(dist_sq[0]*self._dist_array[dist_idx]))
             # We want to check if the other spokes of our pinwheel rotate in the
             # correct direction, however if our candidate rotation is already
             # close to zero within tolerance we can avoid checking for this. 
@@ -165,7 +171,7 @@ class OptimisticPatternMatcherB(object):
             tmp_ref_dist_arary = self._dist_array[id_mask]
             tmp_ref_dx_array = self._dx_array[id_mask]
             tmp_ref_dy_array = self._dy_array[id_mask]
-            tmp_ref_id_array = self.__id_array[id_mask]
+            tmp_ref_id_array = self._id_array[id_mask]
             # Now we can start our loop to look for the remaining candidate
             # spokes of our pinwheel. 
             for cand_idx in xrange(1, len(dist_sq)):
@@ -183,7 +189,7 @@ class OptimisticPatternMatcherB(object):
             # have already computed.
             if len(matched_references) == len(source_candidates):
                 hold_cos_theta = np.sqrt(cos_theta_sq)
-                hold_cos_theta = sin_theta
+                hold_sin_theta = sin_theta
                 break
         # Return the matches. If found.
         if len(matched_references) == len(source_candidates):   
@@ -243,8 +249,11 @@ class OptimisticPatternMatcherB(object):
             # theta_ref and theta_src should be at most +- theta_tolerance.
             ang_lim = (-self._ang_tol*(2*sin_theta_ref + self._ang_tol),
                        self._ang_tol*(2*sin_theta_ref - self._ang_tol))
-            if (np.min(ang_lim) < sin_theta_ref*sin_theta_ref - sin_theta_sq <
-                np.max(ang_lim)):
+            if ((not cross_approx_zero and 
+                np.min(ang_lim) <= sin_theta_ref*sin_theta_ref - sin_theta_sq <
+                np.max(ang_lim)) or
+                (cross_approx_zero and sin_theta_sq <
+                 self._ang_tol*self._ang_tol)):
                 # We found a match, store the correct id and then exit the loop.
                 if np.sign(dot) < 0:
                     hold_id =  ref_id_array[dist_idx, 0]
@@ -263,21 +272,17 @@ class OptimisticPatternMatcherB(object):
         reference catalog, and a cosine and sine rotation return a shifted
         catalog for matching.
         """
-        center_x_shift = self._reference_catalog[center_ref,0]
-        center_y_shift = self._reference_catalog[center_ref,1]
-        
-        delta_x_shift = center_source[0] - center_x_shift
-        delta_y_shift = center_source[1] - center_x_shift
-        
         output_catalog = np.empty_like(source_catalog)
         
-        tmp_x_array = source_catalog[:, 0] - center_x_shift - delta_x_shift
-        tmp_y_array = source_catalog[:, 1] - center_y_shift - delta_y_shift
+        tmp_x_array = source_catalog[:, 0] - center_source[0]
+        tmp_y_array = source_catalog[:, 1] - center_source[1]
         
         output_catalog[:,0] = (
-            cos_theta*tmp_x_array - sin_theta*tmp_y_array + center_x_shift)
+            (cos_theta*tmp_x_array - sin_theta*tmp_y_array) +
+            self._reference_catalog[center_ref, 0])
         output_catalog[:,1] = (
-            sin_theta*tmp_x_array + cos_theta*tmp_y_array + center_y_shift)
+            (sin_theta*tmp_x_array + cos_theta*tmp_y_array) +
+            self._reference_catalog[center_ref, 1])
         
         return output_catalog
     
@@ -287,7 +292,8 @@ class OptimisticPatternMatcherB(object):
         """
         output_matches = np.empty((len(shifted_sources), 2), dtype=np.int_)
         output_matches[:, 0] = np.arange(len(shifted_sources), dtype=np.int_)
-        tmp_ref_idx, tmp_ref_dist = self._ref_kdtree(shifted_sources[:,:2])
+        tmp_ref_dist, tmp_ref_idx = self._ref_kdtree.query(
+            shifted_sources[:,:2])
         output_matches[:, 1] = tmp_ref_idx
         dist_mask = np.where(tmp_ref_dist < self._max_match_dist)
         return output_matches[dist_mask], tmp_ref_dist[dist_mask] 
@@ -296,21 +302,30 @@ class OptimisticPatternMatcherB(object):
         pass
     
     def match(self, source_catalog, n_match):
+        # TODO:
+        #     Create kdtree here on the larger of the two arrays to return
+        #     unique mataches only.
         # Given our input source_catalog we sort on magnitude.
         sorted_catalog = source_catalog[source_catalog[:, 2].argsort()]
         n_source = len(sorted_catalog)
         # Loop through the sources from brightest to faintest grabbing a chucnk
         # of n_match each time.
-        for pattern_idx in xrange(n_source - n_match):
+        matches = None
+        distances = None
+        for pattern_idx in xrange(self._max_n_patterns):
             # Grab the sources
             pattern = sorted_catalog[pattern_idx: pattern_idx + n_match]
             ref_candidates, cos_theta, sin_theta = (
                 self._construct_and_match_pattern(pattern))
-            if len(ref_candidates) == n_match:
+            if len(ref_candidates) >= n_match:
+                print('Shifting...')
                 shifted_sources = self._compute_shift_sources(
                     sorted_catalog, ref_candidates[0], pattern[0], cos_theta,
                     sin_theta)
+                print('Matching...')
                 matches, distances = self._compute_matches(shifted_sources)
+                print('Matches:', len(matches))
                 if len(matches) > self._min_matches:
+                    print("Succeeded after %i patterns..." % pattern_idx)
                     break
         return matches, distances
