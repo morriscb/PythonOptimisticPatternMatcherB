@@ -74,7 +74,7 @@ class OptimisticPatternMatcherB(object):
 
         return None
     
-    def _construct_and_match_pattern(self, source_candidates):
+    def _construct_and_match_pattern(self, source_candidates, n_match):
         """Given a list of source canidates we check the pinwheel pattern they
         create against the reference catalog by checking distances an angles.
         We keep the calculations as simple and fast as posible by keeping most
@@ -173,7 +173,8 @@ class OptimisticPatternMatcherB(object):
             tmp_ref_dy_array = self._dy_array[id_mask]
             tmp_ref_id_array = self._id_array[id_mask]
             # Now we can start our loop to look for the remaining candidate
-            # spokes of our pinwheel. 
+            # spokes of our pinwheel.
+            n_failed = 0
             for cand_idx in xrange(1, len(dist_sq)):
                 match = self._pattern_spoke_test(
                     dist_sq[cand_idx], tmp_dx[cand_idx], tmp_dy[cand_idx],
@@ -182,17 +183,22 @@ class OptimisticPatternMatcherB(object):
                     tmp_ref_id_array)
                 # If we don't find a mach for this spoke we can exit early.
                 if match is None:
-                    break
+                    n_failed += 1
+                    if n_failed >= len(source_candidates) - n_match:
+                        break
+                    continue
                 matched_references.append(match)
+                if len(matched_references) >= n_match:
+                    break
             # If if we've found a match for each spoke we can exit early and
             # then return the matches. We can also send off the rotations we
             # have already computed.
-            if len(matched_references) == len(source_candidates):
+            if len(matched_references) >= n_match:
                 hold_cos_theta = np.sqrt(cos_theta_sq)
                 hold_sin_theta = sin_theta
                 break
         # Return the matches. If found.
-        if len(matched_references) == len(source_candidates):   
+        if len(matched_references) >= n_match:   
             return (matched_references, hold_cos_theta, hold_sin_theta)
         return ([], None, None)
     
@@ -301,7 +307,7 @@ class OptimisticPatternMatcherB(object):
     def _test_valid_shift(self, shift):
         pass
     
-    def match(self, source_catalog, n_match):
+    def match(self, source_catalog, n_check, n_match):
         # TODO:
         #     Create kdtree here on the larger of the two arrays to return
         #     unique mataches only.
@@ -309,15 +315,15 @@ class OptimisticPatternMatcherB(object):
         sorted_catalog = source_catalog[source_catalog[:, 2].argsort()]
         n_source = len(sorted_catalog)
         # Loop through the sources from brightest to faintest grabbing a chucnk
-        # of n_match each time.
-        matches = None
-        distances = None
+        # of n_check each time.
         for pattern_idx in xrange(np.min((self._max_n_patterns,
-                                          len(source_catalog) - n_match))):
+                                    len(source_catalog) - n_check))):
+            matches = None
+            distances = None
             # Grab the sources
-            pattern = sorted_catalog[pattern_idx: pattern_idx + n_match]
+            pattern = sorted_catalog[pattern_idx: pattern_idx + n_check]
             ref_candidates, cos_theta, sin_theta = (
-                self._construct_and_match_pattern(pattern))
+                self._construct_and_match_pattern(pattern, n_match))
             if len(ref_candidates) >= n_match:
                 print('Shifting...')
                 shifted_sources = self._compute_shift_sources(
