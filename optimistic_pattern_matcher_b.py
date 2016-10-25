@@ -35,7 +35,7 @@ class OptimisticPatternMatcherB(object):
         self._min_matches = min_matches
         self._max_n_patterns = max_n_patterns
 
-        self._ref_kdtree = cKDTree(self._reference_catalog[:, :2])
+        # self._ref_kdtree = cKDTree(self._reference_catalog[:, :2])
 
         self._build_distances_and_angles()
 
@@ -277,39 +277,57 @@ class OptimisticPatternMatcherB(object):
             return hold_id
         return None
 
-    def _compute_shift_sources(self, source_catalog, center_ref, center_source,
-                               cos_theta, sin_theta):
+    def _compute_shift_and_match_sources(self, source_catalog, center_ref,
+                                         center_source, cos_theta, sin_theta):
         """Given an input source catalog, pinwheel centers in the source and
         reference catalog, and a cosine and sine rotation return a shifted
         catalog for matching.
         """
-        output_catalog = np.empty_like(source_catalog)
+        if len(source_catalog) > self._n_reference:
+            shifted_references = np.empty_like(self._reference_catalog)
 
-        tmp_x_array = source_catalog[:, 0] - center_source[0]
-        tmp_y_array = source_catalog[:, 1] - center_source[1]
+            tmp_x_array = (self._reference_catalog[:, 0] -
+                           self._reference_catalog[center_ref, 0])
+            tmp_y_array = (self._reference_catalog[:, 1] -
+                           self._reference_catalog[center_ref, 1])
 
-        output_catalog[:, 0] = (
-            (cos_theta*tmp_x_array - sin_theta*tmp_y_array) +
-            self._reference_catalog[center_ref, 0])
-        output_catalog[:, 1] = (
-            (sin_theta*tmp_x_array + cos_theta*tmp_y_array) +
-            self._reference_catalog[center_ref, 1])
+            shifted_references[:, 0] = (
+                (cos_theta*tmp_x_array + sin_theta*tmp_y_array) +
+                center_source[0])
+            shifted_references[:, 1] = (
+                (-1*sin_theta*tmp_x_array + cos_theta*tmp_y_array) +
+                center_source[1])
 
-        return output_catalog
+            output_matches = np.empty((len(shifted_references), 2),
+                                      dtype=np.int_)
+            output_matches[:, 1] = np.arange(len(shifted_references),
+                                             dtype=np.int_)
+            tmp_ref_dist, tmp_ref_idx = self._ref_kdtree.query(
+                shifted_references[:, :2])
+            output_matches[:, 0] = tmp_ref_idx
+            dist_mask = np.where(tmp_ref_dist < self._max_match_dist)
+            return output_matches[dist_mask], tmp_ref_dist[dist_mask]
+        else:
+            shifted_sources = np.empty_like(source_catalog)
 
-    def _compute_matches(self, shifted_sources):
-        """Given a shifted source catalog, find matches in the reference
-        catalog.
-        """
-        output_matches = np.empty((len(shifted_sources), 2), dtype=np.int_)
-        output_matches[:, 0] = np.arange(len(shifted_sources), dtype=np.int_)
-        tmp_ref_dist, tmp_ref_idx = self._ref_kdtree.query(
-            shifted_sources[:, :2])
-        output_matches[:, 1] = tmp_ref_idx
-        dist_mask = np.where(tmp_ref_dist < self._max_match_dist)
-        # TODO:
-        #     Return unique matches only.
-        return output_matches[dist_mask], tmp_ref_dist[dist_mask]
+            tmp_x_array = source_catalog[:, 0] - center_source[0]
+            tmp_y_array = source_catalog[:, 1] - center_source[1]
+
+            shifted_sources[:, 0] = (
+                (cos_theta*tmp_x_array - sin_theta*tmp_y_array) +
+                self._reference_catalog[center_ref, 0])
+            shifted_sources[:, 1] = (
+                (sin_theta*tmp_x_array + cos_theta*tmp_y_array) +
+                self._reference_catalog[center_ref, 1])
+
+            output_matches = np.empty((len(shifted_sources), 2), dtype=np.int_)
+            output_matches[:, 0] = np.arange(len(shifted_sources),
+                                             dtype=np.int_)
+            tmp_ref_dist, tmp_ref_idx = self._ref_kdtree.query(
+                shifted_sources[:, :2])
+            output_matches[:, 1] = tmp_ref_idx
+            dist_mask = np.where(tmp_ref_dist < self._max_match_dist)
+            return output_matches[dist_mask], tmp_ref_dist[dist_mask]
 
     def match(self, source_catalog, n_check, n_match):
         # Given our input source_catalog we sort on magnitude.
@@ -317,6 +335,10 @@ class OptimisticPatternMatcherB(object):
         n_source = len(sorted_catalog)
         # Loop through the sources from brightest to faintest grabbing a chucnk
         # of n_check each time.
+        if n_source > self._n_reference:
+            self._kdtree = cKDTree(source_catalog[:, :2])
+        else:
+            self._kdtree = cKDTree(self._reference_catalog[:, :2])
         for pattern_idx in xrange(np.min((self._max_n_patterns,
                                           n_source - n_check))):
             matches = None
@@ -326,12 +348,17 @@ class OptimisticPatternMatcherB(object):
             ref_candidates, cos_theta, sin_theta = (
                 self._construct_and_match_pattern(pattern, n_match))
             if len(ref_candidates) >= n_match:
-                print('Shifting...')
-                shifted_sources = self._compute_shift_sources(
+                # print('Shifting...')
+                # shifted_sources = self._compute_shift_sources(
+                #     source_catalog, ref_candidates[0], pattern[0], cos_theta,
+                #     sin_theta)
+                # print('Matching...')
+                # matches, distances = self._compute_matches(shifted_sources)
+                # print('Matches:', len(matches))
+                print('Matching...')
+                matches, distances = self._compute_shift_and_match_sources(
                     source_catalog, ref_candidates[0], pattern[0], cos_theta,
                     sin_theta)
-                print('Matching...')
-                matches, distances = self._compute_matches(shifted_sources)
                 print('Matches:', len(matches))
                 if len(matches) > self._min_matches:
                     print("Succeeded after %i patterns." % pattern_idx)
