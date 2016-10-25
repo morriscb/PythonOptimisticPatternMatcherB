@@ -60,6 +60,26 @@ class TestPythonOptimisticPatternMatcherB(unittest.TestCase):
         self.assertEqual(len(matches), len(self.reference_catalog))
         self.assertTrue(np.all(distances < 1e-8))
 
+    def testMatchMoreSources(self):
+        self.pyOPMb = OptimisticPatternMatcherB(
+            reference_catalog=self.reference_catalog[:500], max_shift=1000.0,
+            max_rotation=10.0, dist_tol=75, ang_tol=0.75, max_match_dist=3,
+            min_matches=30, max_n_patterns=250)
+
+        matches, distances = self.pyOPMb.match(self.source_catalog, 8, 5)
+        self.assertEqual(len(matches), len(self.reference_catalog[:500]))
+        self.assertTrue(np.all(distances < 1e-8))
+
+    def testMatchMoreReferences(self):
+        self.pyOPMb = OptimisticPatternMatcherB(
+            reference_catalog=self.reference_catalog, max_shift=1000.0,
+            max_rotation=10.0, dist_tol=75, ang_tol=0.75, max_match_dist=3,
+            min_matches=30, max_n_patterns=250)
+
+        matches, distances = self.pyOPMb.match(self.source_catalog[:500], 8, 5)
+        self.assertEqual(len(matches), len(self.reference_catalog[:500]))
+        self.assertTrue(np.all(distances < 1e-8))
+
     def testMatchShiftRotated(self):
         self.pyOPMb = OptimisticPatternMatcherB(
             reference_catalog=self.reference_catalog, max_shift=1000.0,
