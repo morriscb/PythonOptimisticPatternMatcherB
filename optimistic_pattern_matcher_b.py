@@ -302,7 +302,7 @@ class OptimisticPatternMatcherB(object):
                                       dtype=np.int_)
             output_matches[:, 1] = np.arange(len(shifted_references),
                                              dtype=np.int_)
-            tmp_ref_dist, tmp_ref_idx = self._ref_kdtree.query(
+            tmp_ref_dist, tmp_ref_idx = self._kdtree.query(
                 shifted_references[:, :2])
             output_matches[:, 0] = tmp_ref_idx
             dist_mask = np.where(tmp_ref_dist < self._max_match_dist)
@@ -323,7 +323,7 @@ class OptimisticPatternMatcherB(object):
             output_matches = np.empty((len(shifted_sources), 2), dtype=np.int_)
             output_matches[:, 0] = np.arange(len(shifted_sources),
                                              dtype=np.int_)
-            tmp_ref_dist, tmp_ref_idx = self._ref_kdtree.query(
+            tmp_ref_dist, tmp_ref_idx = self._kdtree.query(
                 shifted_sources[:, :2])
             output_matches[:, 1] = tmp_ref_idx
             dist_mask = np.where(tmp_ref_dist < self._max_match_dist)
