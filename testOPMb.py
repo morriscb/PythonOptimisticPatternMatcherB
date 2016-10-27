@@ -6,7 +6,7 @@ import unittest
 
 import numpy as np
 
-from _optimistic_pattern_matcher_b import OptimisticPatternMatcherB
+from optimistic_pattern_matcher_b import OptimisticPatternMatcherB
 
 __deg_to_rad__ = np.pi/180
 
