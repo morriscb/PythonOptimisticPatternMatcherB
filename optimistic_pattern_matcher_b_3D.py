@@ -48,10 +48,11 @@ class OptimisticPatternMatcherB(object):
             (int(self._n_reference*(self._n_reference - 1)/2), 2),
             dtype=np.int)
         self._dist_array = np.empty(
-            int(self._n_reference*(self._n_reference - 1)/2), dtype=np.float128)
+            int(self._n_reference*(self._n_reference - 1)/2),
+            dtype=np.float64)
         self._delta_array = np.empty(
             (int(self._n_reference*(self._n_reference - 1)/2), 3),
-            dtype=np.float128)
+            dtype=np.float64)
 
         start_idx = 0
         for ref_idx, ref_obj in enumerate(self._reference_catalog):
@@ -75,6 +76,7 @@ class OptimisticPatternMatcherB(object):
         self._dist_array = self._dist_array[self._sorted_args]
         self._id_array = self._id_array[self._sorted_args]
         self._delta_array = self._delta_array[self._sorted_args]
+        self._median_dist = self._dist_array[int(self._dist_array.shape[0]/2)]
 
         return None
 
@@ -97,11 +99,11 @@ class OptimisticPatternMatcherB(object):
                    source_delta[:, 2]**2)
         # We first test if the distance of the first (AB) spoke of our source
         # pinwheel can be found in the array of reference catalog pairs.
-        start_idx = np.searchsorted(self._dist_array,
-                                    dist_sq[0]*(1. - self._dist_tol))
-        end_idx = np.searchsorted(self._dist_array,
-                                  dist_sq[0]*(1. + self._dist_tol),
-                                  side='right')
+        start_idx = np.searchsorted(
+            self._dist_array, dist_sq[0] - self._median_dist*self._dist_tol)
+        end_idx = np.searchsorted(
+            self._dist_array, dist_sq[0] + self._median_dist*self._dist_tol,
+            side='right')
         # If we couldn't find any candidate references distances we exit. We
         # also test if the edges to make sure we are not running over the array
         # size.
@@ -114,6 +116,7 @@ class OptimisticPatternMatcherB(object):
         # Now that we have candiates reference distances for the first spoke of
         # the pinwheel we loop over them and attempt to construct the rest of
         # the pinwheel.
+        # print(end_idx - start_idx)
         for dist_idx in xrange(start_idx, end_idx):
             # Reset the matched references to an empty list because we haven't
             # found any sure matches yet.
@@ -195,11 +198,11 @@ class OptimisticPatternMatcherB(object):
         """
         # As before we first check references with matching distances, exiting
         # early if we find none.
-        start_idx = np.searchsorted(ref_dist_array,
-                                    cand_dist*(1. - self._dist_tol))
-        end_idx = np.searchsorted(ref_dist_array,
-                                  cand_dist*(1. + self._dist_tol),
-                                  side='right')
+        start_idx = np.searchsorted(
+            ref_dist_array, cand_dist - self._median_dist*self._dist_tol)
+        end_idx = np.searchsorted(
+            ref_dist_array, cand_dist + self._median_dist*self._dist_tol,
+            side='right')
         if start_idx == end_idx:
             return None
         if start_idx < 0:
@@ -274,7 +277,7 @@ class OptimisticPatternMatcherB(object):
             rot_cross_matrix = np.array(
                 [[0., -rot_axis[2], rot_axis[1]],
                  [rot_axis[2], 0., -rot_axis[0]],
-                 [-rot_axis[1], rot_axis[0], 0.]], dtype=np.float128)
+                 [-rot_axis[1], rot_axis[0], 0.]], dtype=np.float64)
             self.theta_rot_matrix = (
                 cos_theta*np.identity(3) +
                 sin_theta*rot_cross_matrix +
@@ -296,7 +299,7 @@ class OptimisticPatternMatcherB(object):
         ref_cross_matrix = np.array(
             [[0., -ref_candidate[2], ref_candidate[1]],
              [ref_candidate[2], 0., -ref_candidate[0]],
-             [-ref_candidate[1], ref_candidate[0], 0.]], dtype=np.float128)
+             [-ref_candidate[1], ref_candidate[0], 0.]], dtype=np.float64)
         self.phi_rot_matrix = (
             cos_phi*np.identity(3) +
             sin_phi*ref_cross_matrix +
