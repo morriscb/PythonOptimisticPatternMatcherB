@@ -17,21 +17,30 @@ class OptimisticPatternMatcherB(object):
     ----------------------------------------------------------------------------
     Attributes:
         reference_catalog: Input array of x, y, mag of reference objects.
+        max_rotation_theta: The max "shift" distance allowed in degrees.
+        max_rotation_phi: The max rotation allowed in degrees
         dist_tol: float epislon distance to consider a pair of objects the
-        same. max_angle: float max rotation to consider a possible match
-        max_shift: float max distance to shift the image for a match
+        same. Units are in degrees.
+        ang_tol: float max tolerance to consider the angles between two
+        spokes in the pattern the same. Units are degrees.
+        max_match_dist: float Maximum distance after shift and rotation are
+        applied to consider two objects a match in the KDTree.
+        min_matches: int minimum number of objects required to be matched to
+        consider the match valid.
+        max_n_patterns: int Number of patterns to attempt to create before
+        exiting with a failure.
     """
 
     def __init__(self, reference_catalog, max_rotation_theta,
-                 max_rotation_phi, dist_tol, shape_tol, max_match_dist,
+                 max_rotation_phi, dist_tol, ang_tol, max_match_dist,
                  min_matches, max_n_patterns):
         self._reference_catalog = copy(reference_catalog[:, :3])
         self._n_reference = len(self._reference_catalog)
         self._max_cos_theta = np.cos(max_rotation_theta*__deg_to_rad__)
         self._max_cos_phi_sq = np.cos(max_rotation_phi*__deg_to_rad__)**2
         self._max_sin_phi_sq = 1 - self._max_cos_phi_sq
-        self._dist_tol = dist_tol
-        self._shape_tol = shape_tol
+        self._dist_tol = dist_tol*__deg_to_rad__
+        self._ang_tol = ang_tol*__deg_to_rad__
         self._max_match_dist = max_match_dist*__deg_to_rad__
         self._min_matches = min_matches
         self._max_n_patterns = max_n_patterns
@@ -72,6 +81,7 @@ class OptimisticPatternMatcherB(object):
                 self._delta_array[start_idx: start_idx + end_idx, 2]**2)
             start_idx += end_idx
 
+        self._dist_array = np.sqrt(self._dist_array)
         self._sorted_args = self._dist_array.argsort()
         self._dist_array = self._dist_array[self._sorted_args]
         self._id_array = self._id_array[self._sorted_args]
@@ -88,21 +98,21 @@ class OptimisticPatternMatcherB(object):
         """
         matched_references = []
         # Create our vector and distances for the source object pinwheel.
-        # TODO:
-        #     Could possibly move calculating the distances to the other parts
-        #     of the pinwheel until they are absolutely needed.
         source_delta = np.empty((len(source_candidates) - 1, 3))
         source_delta[:, 0] = source_candidates[1:, 0] - source_candidates[0, 0]
         source_delta[:, 1] = source_candidates[1:, 1] - source_candidates[0, 1]
         source_delta[:, 2] = source_candidates[1:, 2] - source_candidates[0, 2]
-        dist_sq = (source_delta[:, 0]**2 + source_delta[:, 1]**2 +
-                   source_delta[:, 2]**2)
+        source_dist_array = np.sqrt(source_delta[:, 0]**2 +
+                                    source_delta[:, 1]**2 +
+                                    source_delta[:, 2]**2)
         # We first test if the distance of the first (AB) spoke of our source
         # pinwheel can be found in the array of reference catalog pairs.
         start_idx = np.searchsorted(
-            self._dist_array, dist_sq[0] - self._median_dist*self._dist_tol)
+            self._dist_array,
+            source_dist_array[0] - self._dist_tol)
         end_idx = np.searchsorted(
-            self._dist_array, dist_sq[0] + self._median_dist*self._dist_tol,
+            self._dist_array,
+            source_dist_array[0] + self._dist_tol,
             side='right')
         # If we couldn't find any candidate references distances we exit. We
         # also test if the edges to make sure we are not running over the array
@@ -116,7 +126,6 @@ class OptimisticPatternMatcherB(object):
         # Now that we have candiates reference distances for the first spoke of
         # the pinwheel we loop over them and attempt to construct the rest of
         # the pinwheel.
-        # print(end_idx - start_idx)
         for dist_idx in xrange(start_idx, end_idx):
             # Reset the matched references to an empty list because we haven't
             # found any sure matches yet.
@@ -145,6 +154,7 @@ class OptimisticPatternMatcherB(object):
                 matched_references.append(self._id_array[dist_idx][1])
                 matched_references.append(self._id_array[dist_idx][0])
                 ref_delta = -self._delta_array[dist_idx]
+            ref_delta_dist = self._dist_array[dist_idx]
             # Since we already have the first two reference candidate ids we
             # can narrow our search to only those pairs that contain our
             # pinwheel reference and exclude the reference we have already used
@@ -160,12 +170,13 @@ class OptimisticPatternMatcherB(object):
             # Now we can start our loop to look for the remaining candidate
             # spokes of our pinwheel.
             n_failed = 0
-            for cand_idx in xrange(1, len(dist_sq)):
+            for cand_idx in xrange(1, len(source_dist_array)):
                 match = self._pattern_spoke_test(
-                    dist_sq[cand_idx], source_delta[cand_idx],
+                    source_dist_array[cand_idx], source_delta[cand_idx],
                     source_candidates[0], source_delta[0],
-                    matched_references[0], ref_delta, tmp_ref_dist_arary,
-                    tmp_ref_delta_array, tmp_ref_id_array)
+                    source_dist_array[0], matched_references[0], ref_delta,
+                    ref_delta_dist, tmp_ref_dist_arary, tmp_ref_delta_array,
+                    tmp_ref_id_array)
                 # If we don't find a mach for this spoke we can exit early.
                 if match is None:
                     n_failed += 1
@@ -191,57 +202,69 @@ class OptimisticPatternMatcherB(object):
         return ([], None, None)
 
     def _pattern_spoke_test(self, cand_dist, cand_delta, source_center,
-                            source_delta, ref_center_id, ref_delta,
-                            ref_dist_array, ref_delta_array, ref_id_array):
+                            source_delta, source_delta_dist, ref_center_id,
+                            ref_delta, ref_delta_dist, ref_dist_array,
+                            ref_delta_array, ref_id_array):
         """Internal function finding matches for the remaining spokes of our
         candidate pinwheel.
         """
         # As before we first check references with matching distances, exiting
         # early if we find none.
         start_idx = np.searchsorted(
-            ref_dist_array, cand_dist - self._median_dist*self._dist_tol)
+            ref_dist_array, cand_dist - self._dist_tol)
         end_idx = np.searchsorted(
-            ref_dist_array, cand_dist + self._median_dist*self._dist_tol,
+            ref_dist_array, cand_dist + self._dist_tol,
             side='right')
         if start_idx == end_idx:
             return None
         if start_idx < 0:
             start_idx = 0
-        if end_idx > self._dist_array.shape[0]:
-            end_idx = self._dist_array.shape[0]
+        if end_idx > ref_dist_array.shape[0]:
+            end_idx = ref_dist_array.shape[0]
         # Loop over the posible matches and test them for quality.
         hold_id = -99
         for dist_idx in xrange(start_idx, end_idx):
             # First we compute the dot product between our delta
             # vectors in each of the source and reference pinwheels
-            # and test that they are the same within tolerance.
+            # and test that they are the same within tolerance. Since
+            # we know the distances of these deltas already we can 
+            # normalize the vectors and compare the values of cos_theta
+            # between the two legs.
             ref_sign = 1
             if ref_id_array[dist_idx, 1] == ref_center_id:
                 ref_sign = -1
-            dot_source = np.dot(cand_delta, source_delta)
-            dot_ref = ref_sign*np.dot(ref_delta_array[dist_idx], ref_delta)
-            if not (-2*self._shape_tol <
-                    (dot_source - dot_ref) /
-                    (dot_source + dot_ref) <
-                    2*self._shape_tol):
+            cos_theta_source = (np.dot(cand_delta, source_delta) /
+                                (cand_dist*source_delta_dist))
+            cos_theta_ref = ref_sign*(
+                np.dot(ref_delta_array[dist_idx], ref_delta) /
+                (ref_dist_array[dist_idx]*ref_delta_dist))
+            # We need to test that the vectors are not completely aligned.
+            # If they are our first test will be invalid thanks to
+            # 1 - cos_theta**2 equaling zero.
+            # Using a few trig relations and taylor expantions around
+            # _ang_tol we compare the opening angles of our pinwheel
+            # legs to see if they are within tolerance.
+            if (cos_theta_ref < 1. and
+                not ((cos_theta_source - cos_theta_ref)**2 /
+                     (1 - cos_theta_ref**2) < self._ang_tol**2)):
                 continue
             # Now we compute the cross product between the first
             # rungs of our spokes and our candidate rungs. We then
             # dot these into our center vector to make sure the
             # rotation direction and amount of rotation are correct.
             # If they are not we move on to the next candidate.
-            cross_source = np.cross(cand_delta, source_delta)
-            cross_ref = ref_sign*np.cross(ref_delta_array[dist_idx], ref_delta)
+            cross_source = (np.cross(cand_delta, source_delta) /
+                            (cand_dist*source_delta_dist))
+            cross_ref = ref_sign*(
+                np.cross(ref_delta_array[dist_idx], ref_delta) /
+                (ref_dist_array[dist_idx]*ref_delta_dist))
             dot_cross_source = np.dot(cross_source, source_center)
             dot_cross_ref = np.dot(cross_ref,
                                    self._reference_catalog[ref_center_id])
-            # Regardless of aboslute rotations on the sphere, these dot
-            # products should be within a tolerance of each other given the
-            # noise. The relative tolerance specified is left to the user.
-            if not (-2*self._shape_tol <
-                    (dot_cross_source - dot_cross_ref) /
-                    (dot_cross_source + dot_cross_ref) <
-                    2*self._shape_tol):
+            # 
+            if not (-self._ang_tol <
+                    (dot_cross_source - dot_cross_ref) / cos_theta_ref <
+                    self._ang_tol):
                 continue
             # Check to see which id we should return.
             if ref_sign == 1:
