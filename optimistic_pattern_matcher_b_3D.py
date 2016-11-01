@@ -10,7 +10,7 @@ __deg_to_rad__ = np.pi/180.0
 
 
 class OptimisticPatternMatcherB(object):
-    """Class implimenting Optimistic Pattern Matcher B from Tubak 2007. The
+    """Class implimenting Optimistic Pattern Matcher B from Tabur 2007. The
     class loads and stores the reference object in a convienent data structure
     for matching any set of source obejcts that are assumed to contain each
     other.
