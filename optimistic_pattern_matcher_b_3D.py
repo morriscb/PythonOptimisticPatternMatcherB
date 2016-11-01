@@ -40,11 +40,15 @@ class OptimisticPatternMatcherB(object):
         self._max_cos_phi_sq = np.cos(max_rotation_phi*__deg_to_rad__)**2
         self._dist_tol = dist_tol*__deg_to_rad__
         self._ang_tol = ang_tol*__deg_to_rad__
-        self._cos_limit = np.min((1 - 1e-8, 1 - self._ang_tol**2/2))
-        self._sin_limit = np.min((1e-8, self._ang_tol))
         self._max_match_dist = max_match_dist*__deg_to_rad__
         self._min_matches = min_matches
         self._max_n_patterns = max_n_patterns
+        # These two tests set limits the values of cosine theta in the spoken
+        # pattern part of the pattern matcher. These avoid divide by zero
+        # and also enforce a small angle approximation for the spokes at
+        # 0, 180 degrees of the first pair and 90, 270 respectively.
+        self._cos_limit = np.min((1 - 1e-8**2/2., 1 - self._ang_tol**2/2))
+        self._sin_limit = np.max((1e-8, self._ang_tol))
 
         self._is_valid_rotation = False
 
@@ -253,11 +257,12 @@ class OptimisticPatternMatcherB(object):
             # Using a few trig relations and taylor expantions around
             # _ang_tol we compare the opening angles of our pinwheel
             # legs to see if they are within tolerance.
-            if (-self._cos_limit < cos_theta_ref < self._cos_limit and
+            cos_comparison = -self._cos_limit < cos_theta_ref < self._cos_limit
+            if (cos_comparison and
                 not ((cos_theta_source - cos_theta_ref)**2 /
                      (1 - cos_theta_ref**2) < self._ang_tol**2)):
                 continue
-            elif (not (-self._cos_limit < cos_theta_ref < self._cos_limit) and
+            elif (not cos_comparison and
                   not ((cos_theta_source - cos_theta_ref)**2 /
                        self._sin_limit**2 < self._ang_tol**2)):
                 continue
@@ -279,12 +284,13 @@ class OptimisticPatternMatcherB(object):
             # with the centeral vectors. Again using trig relations and
             # small angle aproximation on _ang_tol we arrive at the
             # folloing relation.
-            if (-self._sin_limit < cos_theta_ref < self._sin_limit and
+            sin_comparison = -self._sin_limit < cos_theta_ref < self._sin_limit
+            if (not sin_comparison and
                 not (-self._ang_tol <
                      (dot_cross_source - dot_cross_ref)/cos_theta_ref <
                      self._ang_tol)):
                 continue
-            elif (not (-self._sin_limit < cos_theta_ref < self._sin_limit) and
+            elif (sin_comparison and
                   not (-self._ang_tol <
                        (dot_cross_source - dot_cross_ref)/self._sin_limit <
                        self._ang_tol)):
