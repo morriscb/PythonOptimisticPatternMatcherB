@@ -429,6 +429,21 @@ class OptimisticPatternMatcherB(object):
         return unique_mask
 
     def match(self, source_catalog, n_check, n_match):
+        """Function for matching a given source catalog into the loaded
+        reference catalog.
+        ----------------------------------------------------------------------
+        Args:
+            source_catalog: float array of spherical x,y,z coordinates and a
+                magnitude.
+            n_check: int value specifying the number of sources to attempt a
+                match on. Not all may be checked if n_match criteria is met
+                before hand. n_check should be greater than n_match by 1-3
+                objects.
+            n_match: Number of objects to use in constructing a pattern.
+        Returns:
+            tuple (2D int array of matched pairs,
+                   float array of pair distances)
+        """
         # Given our input source_catalog we sort on magnitude.
         sorted_catalog = source_catalog[source_catalog[:, -1].argsort()]
         n_source = len(sorted_catalog)
