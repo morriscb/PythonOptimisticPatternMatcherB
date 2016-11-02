@@ -47,8 +47,8 @@ class OptimisticPatternMatcherB(object):
         # pattern part of the pattern matcher. These avoid divide by zero
         # and also enforce a small angle approximation for the spokes at
         # 0, 180 degrees of the first pair and 90, 270 respectively.
-        self._cos_limit = np.min((1 - 1e-8**2/2., 1 - self._ang_tol**2/2))
-        self._sin_limit = np.max((1e-8, self._ang_tol))
+        self._cos_limit = np.cos(np.max((1.4e-8, self._ang_tol)))
+        self._sin_limit = np.sin(np.max((1.4e-8, self._ang_tol)))
 
         self._is_valid_rotation = False
 
@@ -96,6 +96,12 @@ class OptimisticPatternMatcherB(object):
 
         return None
 
+    def _candidate_sort(self, dist_array, cand_dist, start_idx):
+        """Internal function for sorting an array by distance relative to the
+        candidate distance out.
+        """
+        return np.argsort(np.fabs(dist_array - cand_dist)) + start_idx
+
     def _construct_and_match_pattern(self, source_candidates, n_match):
         """Given a list of source canidates we check the pinwheel pattern they
         create against the reference catalog by checking distances an angles.
@@ -132,7 +138,9 @@ class OptimisticPatternMatcherB(object):
         # Now that we have candiates reference distances for the first spoke of
         # the pinwheel we loop over them and attempt to construct the rest of
         # the pinwheel.
-        for dist_idx in xrange(start_idx, end_idx):
+        for dist_idx in self._candidate_sort(
+            self._dist_array[start_idx:end_idx], source_dist_array[0],
+            start_idx):
             # Reset the matched references to an empty list because we haven't
             # found any sure matches yet.
             matched_references = []
@@ -236,7 +244,9 @@ class OptimisticPatternMatcherB(object):
             end_idx = ref_dist_array.shape[0]
         # Loop over the posible matches and test them for quality.
         hold_id = -99
-        for dist_idx in xrange(start_idx, end_idx):
+        for dist_idx in self._candidate_sort(
+            ref_dist_array[start_idx:end_idx], cand_dist,
+            start_idx):
             # First we compute the dot product between our delta
             # vectors in each of the source and reference pinwheels
             # and test that they are the same within tolerance. Since
