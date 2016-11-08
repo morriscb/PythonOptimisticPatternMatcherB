@@ -21,6 +21,10 @@ class OptimisticPatternMatcherB(object):
         max_rotation_phi: The max rotation allowed in degrees
         dist_tol: float epislon distance to consider a pair of objects the
         same. Units are in degrees.
+        max_dist_cand: int max number of candidates to test For dense fields
+        even a small dist_tol can lead to looping over a large number of
+        candidates. This cuts off that loop early so we don't slow the code by
+        looking over too many candidates.
         ang_tol: float max tolerance to consider the angles between two
         spokes in the pattern the same. Units are degrees.
         max_match_dist: float Maximum distance after shift and rotation are
@@ -32,14 +36,18 @@ class OptimisticPatternMatcherB(object):
     """
 
     def __init__(self, reference_catalog, max_rotation_theta,
-                 max_rotation_phi, dist_tol, ang_tol, max_match_dist,
-                 min_matches, max_n_patterns):
+                 max_rotation_phi, dist_tol, max_dist_cand, ang_tol,
+                 max_match_dist, min_matches, max_n_patterns):
         self._reference_catalog = copy(reference_catalog[:, :3])
         self._n_reference = len(self._reference_catalog)
+
         self._max_cos_theta = np.cos(max_rotation_theta*__deg_to_rad__)
         self._max_cos_phi_sq = np.cos(max_rotation_phi*__deg_to_rad__)**2
+
         self._dist_tol = dist_tol*__deg_to_rad__
+        self._max_dist_cand = max_dist_cand
         self._ang_tol = ang_tol*__deg_to_rad__
+
         self._max_match_dist = max_match_dist*__deg_to_rad__
         self._min_matches = min_matches
         self._max_n_patterns = max_n_patterns
@@ -137,10 +145,17 @@ class OptimisticPatternMatcherB(object):
             end_idx = self._dist_array.shape[0]
         # Now that we have candiates reference distances for the first spoke of
         # the pinwheel we loop over them and attempt to construct the rest of
-        # the pinwheel.
-        for dist_idx in self._candidate_sort(
+        # the pinwheel. We loop over them from the smallest difference in
+        # distane between the reference and source to the largest.
+        cand_idx_array = self._candidate_sort(
             self._dist_array[start_idx:end_idx], source_dist_array[0],
-            start_idx):
+            start_idx)
+        if cand_idx_array.shape[0] > self._max_dist_cand:
+            print("Pattern cand array greater than max_dist_cand...")
+            print("\tMax dist diff will be %.8f" %
+                  (source_dist_array[0] -
+                   self._dist_array[cand_idx_array[self._max_dist_cand - 1]]))
+        for dist_idx in cand_idx_array[:self._max_dist_cand]:
             # Reset the matched references to an empty list because we haven't
             # found any sure matches yet.
             matched_references = []
@@ -244,9 +259,14 @@ class OptimisticPatternMatcherB(object):
             end_idx = ref_dist_array.shape[0]
         # Loop over the posible matches and test them for quality.
         hold_id = -99
-        for dist_idx in self._candidate_sort(
-            ref_dist_array[start_idx:end_idx], cand_dist,
-            start_idx):
+        cand_idx_array = self._candidate_sort(
+            ref_dist_array[start_idx:end_idx], cand_dist, start_idx)
+        if cand_idx_array.shape[0] > self._max_dist_cand:
+            print("Pattern cand array greater than max_dist_cand...")
+            print("\tMax dist diff will be %.8f" %
+                  (cand_dist -
+                   ref_dist_array[cand_idx_array[self._max_dist_cand - 1]]))
+        for dist_idx in cand_idx_array[:self._max_dist_cand]:
             # First we compute the dot product between our delta
             # vectors in each of the source and reference pinwheels
             # and test that they are the same within tolerance. Since
