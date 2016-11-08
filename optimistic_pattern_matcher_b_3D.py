@@ -408,49 +408,28 @@ class OptimisticPatternMatcherB(object):
         reference catalog, and a cosine and sine rotation return a shifted
         catalog for matching.
         """
-        # Check to see if we crated the kd-tree on the sources or the
+        # Since the sources are the kd-tree objects we rotate the
         # references.
-        if len(source_catalog) >= self._n_reference:
-            # Since the sources are the kd-tree objects we rotate the
-            # references.
-            shifted_references = np.dot(
-                self.rot_matrix.transpose(),
-                self._reference_catalog[:, :3].transpose()).transpose()
-            # Empty arrays for output.
-            output_matches = np.empty((len(shifted_references), 2),
-                                      dtype=np.int_)
-            # Store the "id" of the references
-            output_matches[:, 1] = np.arange(len(shifted_references),
-                                             dtype=np.int_)
-            # Find the matches.
-            tmp_ref_dist, tmp_ref_idx = self._kdtree.query(
-                shifted_references[:, :3])
-            unique_mask = self._test_unique_matches(tmp_ref_idx, tmp_ref_dist)
-            output_matches[:, 0] = tmp_ref_idx
-            # Mask on the max distance and return the masked arrays.
-            dist_mask = np.logical_and(unique_mask,
-                                       tmp_ref_dist < self._max_match_dist)
-            return output_matches[dist_mask], tmp_ref_dist[dist_mask]
-        else:
-            # Since the references are the kd-tree objects we rotate the
-            # sources.
-            shifted_sources = np.dot(
-                self.rot_matrix, source_catalog[:, :3].transpose()).transpose()
-            # Empty arrays for output.
-            output_matches = np.empty((len(shifted_sources), 2), dtype=np.int_)
-            # Store the "id" of the sources
-            output_matches[:, 0] = np.arange(len(shifted_sources),
-                                             dtype=np.int_)
-            # Find the matches.
-            tmp_src_dist, tmp_src_idx = self._kdtree.query(
-                shifted_sources[:, :3])
-            # Check for unique matches.
-            unique_mask = self._test_unique_matches(tmp_src_idx, tmp_src_dist)
-            output_matches[:, 1] = tmp_src_idx
-            # Mask on the max distance and return the masked arrays.
-            dist_mask = np.logical_and(unique_mask,
-                                       tmp_src_dist < self._max_match_dist)
-            return output_matches[dist_mask], tmp_src_dist[dist_mask]
+        shifted_references = np.dot(
+            self.rot_matrix.transpose(),
+            self._reference_catalog[:, :3].transpose()).transpose()
+        # Empty arrays for output.
+        output_matches = np.empty((len(shifted_references), 2),
+                                  dtype=np.int_)
+        # Store the "id" of the references
+        output_matches[:, 1] = np.arange(len(shifted_references),
+                                         dtype=np.int_)
+        # Find the matches.
+        tmp_src_dist, tmp_src_idx = self._kdtree.query(
+            shifted_references[:, :3])
+        output_matches[:, 0] = tmp_src_idx
+        tmp_src_dist = tmp_src_dist
+        unique_mask = self._test_unique_matches(output_matches[:, 0],
+                                                tmp_src_dist)
+        # Mask on the max distance and return the masked arrays.
+        dist_mask = np.logical_and(unique_mask,
+                                   tmp_src_dist < self._max_match_dist)
+        return output_matches[dist_mask], tmp_src_dist[dist_mask]
 
     def _test_unique_matches(self, idx_array, dist_array):
         """Internal function for creating a mask of matches with unique indices.
@@ -458,10 +437,19 @@ class OptimisticPatternMatcherB(object):
         # TODO:
         #     Only returns matches that are truly unique. Could later add test
         # on distances to return the closest match only.
-        unique_array, unique_idx_array = np.unique(idx_array,
-                                                   return_index=True)
+        unique_array, unique_idx_array, inverse_array = np.unique(
+            idx_array, return_index=True, return_inverse=True)
         unique_mask = np.zeros(len(idx_array), dtype=np.bool)
         unique_mask[unique_idx_array] = True
+        used_non_unique = np.array([], np.int64)
+        for non_unique_idx in idx_array[inverse_array[unique_array.shape[0]:]]:
+            if np.any(non_unique_idx == used_non_unique):
+                continue
+            used_non_unique = np.concatenate((used_non_unique,
+                                              [idx_array[non_unique_idx]]))
+            dub_idx_array = np.argwhere(idx_array == non_unique_idx)
+            unique_mask[
+                dub_idx_array[np.argmin(dist_array[dub_idx_array])]] = True
         return unique_mask
 
     def match(self, source_catalog, n_check, n_match):
@@ -486,10 +474,7 @@ class OptimisticPatternMatcherB(object):
         # If there are more sources we store them in the kd-tree. Opposite
         # if there are more references. This we we will always have unique
         # matches.
-        if n_source >= self._n_reference:
-            self._kdtree = cKDTree(source_catalog[:, :3])
-        else:
-            self._kdtree = cKDTree(self._reference_catalog[:, :3])
+        self._kdtree = cKDTree(source_catalog[:, :3])
         # Loop through the sources from brightest to faintest grabbing a chucnk
         # of n_check each time.
         for pattern_idx in xrange(np.min((self._max_n_patterns,
