@@ -37,14 +37,16 @@ class TestPythonOptimisticPatternMatcherB(unittest.TestCase):
     def testInit(self):
         self.pyOPMb = OptimisticPatternMatcherB(
             reference_catalog=self.reference_catalog, max_rotation_theta=0.5,
-            max_rotation_phi=45.0, dist_tol=15/3600., ang_tol=0.5,
-            max_match_dist=15/3600, min_matches=30, max_n_patterns=50)
+            max_rotation_phi=45.0, dist_tol=15/3600., max_dist_cand=1000,
+            ang_tol=0.5, max_match_dist=15/3600, min_matches=30,
+            max_n_patterns=50)
 
     def testConstructAndMatchPattern(self):
         self.pyOPMb = OptimisticPatternMatcherB(
             reference_catalog=self.reference_catalog, max_rotation_theta=0.5,
-            max_rotation_phi=45.0,  dist_tol=15/3600., ang_tol=0.5,
-            max_match_dist=15/3600, min_matches=30, max_n_patterns=50)
+            max_rotation_phi=45.0,  dist_tol=15/3600., max_dist_cand=1000,
+            ang_tol=0.5, max_match_dist=15/3600, min_matches=30,
+            max_n_patterns=50)
 
         pattern_list = self.pyOPMb._construct_and_match_pattern(
             self.source_catalog[:6, :3], 6)
@@ -79,8 +81,9 @@ class TestPythonOptimisticPatternMatcherB(unittest.TestCase):
     def testMatchPerfect(self):
         self.pyOPMb = OptimisticPatternMatcherB(
             reference_catalog=self.reference_catalog, max_rotation_theta=0.5,
-            max_rotation_phi=45.0,  dist_tol=15/3600., ang_tol=0.5,
-            max_match_dist=15/3600, min_matches=30, max_n_patterns=50)
+            max_rotation_phi=45.0,  dist_tol=15/3600., max_dist_cand=1000,
+            ang_tol=0.5, max_match_dist=15/3600, min_matches=30,
+            max_n_patterns=50)
 
         matches, distances = self.pyOPMb.match(self.source_catalog, 9, 6)
         self.assertEqual(len(matches), len(self.reference_catalog))
@@ -88,9 +91,10 @@ class TestPythonOptimisticPatternMatcherB(unittest.TestCase):
 
     def testMatchMoreSources(self):
         self.pyOPMb = OptimisticPatternMatcherB(
-            reference_catalog=self.reference_catalog[:500], max_rotation_theta=0.5,
-            max_rotation_phi=45.0,  dist_tol=15/3600., ang_tol=0.5,
-            max_match_dist=15/3600, min_matches=30, max_n_patterns=50)
+            reference_catalog=self.reference_catalog[:500],
+            max_rotation_theta=0.5, max_rotation_phi=45.0,  dist_tol=15/3600.,
+            max_dist_cand=1000, ang_tol=0.5, max_match_dist=15/3600,
+            min_matches=30, max_n_patterns=50)
 
         matches, distances = self.pyOPMb.match(self.source_catalog, 9, 6)
         self.assertEqual(len(matches), len(self.reference_catalog[:500]))
@@ -99,8 +103,9 @@ class TestPythonOptimisticPatternMatcherB(unittest.TestCase):
     def testMatchMoreReferences(self):
         self.pyOPMb = OptimisticPatternMatcherB(
             reference_catalog=self.reference_catalog, max_rotation_theta=0.5,
-            max_rotation_phi=45.0,  dist_tol=15/3600., ang_tol=0.5,
-            max_match_dist=15/3600, min_matches=30, max_n_patterns=50)
+            max_rotation_phi=45.0,  dist_tol=15/3600., max_dist_cand=1000,
+            ang_tol=0.5, max_match_dist=15/3600, min_matches=30,
+            max_n_patterns=50)
 
         matches, distances = self.pyOPMb.match(self.source_catalog[:500], 9, 6)
         self.assertEqual(len(matches), len(self.reference_catalog[:500]))
@@ -109,8 +114,9 @@ class TestPythonOptimisticPatternMatcherB(unittest.TestCase):
     def testPhiRotation(self):
         self.pyOPMb = OptimisticPatternMatcherB(
             reference_catalog=self.reference_catalog, max_rotation_theta=0.5,
-            max_rotation_phi=45.0,  dist_tol=15/3600., ang_tol=0.5,
-            max_match_dist=15/3600, min_matches=30, max_n_patterns=50)
+            max_rotation_phi=45.0,  dist_tol=15/3600., max_dist_cand=1000,
+            ang_tol=0.5, max_match_dist=15/3600, min_matches=30,
+            max_n_patterns=50)
         phi = 10.0*__deg_to_rad__
         cos_phi = np.cos(phi)
         sin_phi = np.sin(phi)
